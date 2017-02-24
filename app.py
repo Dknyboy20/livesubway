@@ -22,7 +22,7 @@ with open(PICKLE_DIR + "graph.pkl", "rb") as graph_f, \
         open(PICKLE_DIR + "prev_stops.pkl", "rb") as prev_stops_f, \
         open(JSON_DIR + "shapes.json", "r") as shapes_f, \
         open(JSON_DIR + "stops.json", "r") as stops_f, \
-        open(JSON_DIR + "shapes_out.json", "r") as routes_f, \
+        open(JSON_DIR + "routes.json", "r") as routes_f, \
         open(JSON_DIR + "colors.json", "r") as colors_f:
     graph = pickle.load(graph_f)
     prev_stops = pickle.load(prev_stops_f)
@@ -120,6 +120,13 @@ def subway_cars():
 
     print "Emitted."
     # emit('feed', demos[0])
+
+@socketio.on('update_subway_cars')
+def update_subway_cars:
+    # current time = c
+    # checks if any subway cars are started in the next c + delay seconds
+    # checks if any subway cars are deleted in the next c + delay seconds
+    # 
 
 
 def subway_cars_timer():
