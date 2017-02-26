@@ -121,16 +121,12 @@ def subway_cars():
     print "Emitted."
     # emit('feed', demos[0])
 
-@socketio.on('update_subway_cars')
-def update_subway_cars:
-    # current time = c
-    # checks if any subway cars are started in the next c + delay seconds
-    # checks if any subway cars are deleted in the next c + delay seconds
-    # 
+# @socketio.on('update_subway_cars')
+# def update_subway_cars:
+# TODO: Implement
 
 
 def subway_cars_timer():
-    counter = 1
     while True:
         socketio.sleep(30)
         # demo_emit = demos[counter % len(demos)]
