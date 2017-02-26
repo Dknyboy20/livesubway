@@ -12,6 +12,5 @@ API_KEYS.py
 .vagrant
 .vscode
 transit_files
-!map_files/
 map_files/*
 !map_files/routes.json
