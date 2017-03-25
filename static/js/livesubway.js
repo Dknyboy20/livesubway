@@ -93,6 +93,12 @@ const findDistance = (startindex, endindex, coordmap) => {
 // Calculates the speed of the train required to get 
 // from <startindex:int> to <endindex:int> along the specific line
 // within SERVER_DELAY seconds.
+/**
+ * @param  {[type]}
+ * @param  {[type]}
+ * @param  {[type]}
+ * @return {[type]}
+ */
 const calcSpeed = (startindex, endindex, coordmap) => {
   return findDistance(startindex, endindex, coordmap)/SERVER_DELAY;
  };
@@ -374,5 +380,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("feed", subwayCars => {
     animateTrains(map, subwayCars);
+  });
+  socket.on("update", message => {
+    console.log(message);
   });
 });

@@ -8,8 +8,10 @@ MAP_DIR = "map_files/"
 def parse_routes(shapes_fin):
     """Generates routes.json that contains the geojson mappings for each of
     the subway lines used.
+
     Args:
         shapes_fin (file): shapes.json that contains all coordinates
+
     Returns:
         void: writes to routes.json
     """
@@ -51,8 +53,10 @@ def parse_routes(shapes_fin):
 
 def convertTime(sbw_time):
     """Converts sbw_time string into a datetime time object
+
     Args:
         sbw_time (str): created from sbw_id.
+
     Returns:
         str: time in standard isoformat
     """
@@ -70,8 +74,10 @@ def parse_trips(trips_fin):
     schedule for each day an array of dictionary objects. Each object contains
     essential infomation about the unique train schedule and is sorted by
     incrasing starting time.
+
     Args:
         trips_f (file): file containing all scheduled trips info
+
     Returns:
         void: writes a json object into mapfiles/
     """
@@ -97,9 +103,51 @@ def parse_trips(trips_fin):
         trips_jout[sbw_day] = sorted(sbw_data, key=lambda x:
                                      (int(x.get("id").split('_')[1]),
                                       x.get("line")))
-    with open("map_files/trips.json", "w") as trips_fot:
-        json.dump(trips_jout, trips_fot)
+    with open(MAP_DIR + "/trips.json", "w") as trips_fout:
+        json.dump(trips_jout, trips_fout)
 
+
+def parse_times(times_fin):
+    """Creates a JSON dictionary. This file is redundant with trips_fout
+
+    Args:
+        times_fin (TYPE): Description
+
+    Returns:
+        TYPE: Description
+    """
+    times_fin.readline()
+    times_jout = {"WKD": [], "SAT": [], "SUN": []}
+    curr_trip_id = ""
+    curr_trip = []
+    for line in times_fin:
+        line = line.split(",")
+        if curr_trip_id == "":
+            curr_trip_id = line[0]
+        # check to see if the subway trip has changed - all trips are
+        # expected to be in order
+        if curr_trip_id != line[0]:
+            sbw_info = curr_trip_id.split("_")
+            sbw_day = sbw_info[0][-3:]
+            assert(sbw_day in ["SAT", "SUN", "WKD"])
+            times_jout[sbw_day].append({
+                "line": sbw_info[-1][0:sbw_info[-1].find('.')],
+                "id": curr_trip_id,
+                "init_time": convertTime(sbw_info[1]),
+                "trip_time": curr_trip
+            })
+            assert(times_jout[sbw_day][0]["init_time"] ==
+                   times_jout[sbw_day][0]["trip_time"][0][0])
+
+            curr_trip_id, curr_trip = line[0], []
+
+        curr_trip.append((line[1], line[3]))
+    for sbw_day, sbw_data in times_jout.iteritems():
+        times_jout[sbw_day] = sorted(sbw_data, key=lambda x:
+                                     (int(x.get("id").split('_')[1]),
+                                      x.get("line")))
+    with open(MAP_DIR + "times.json", "w") as times_fout:
+        json.dump(times_jout, times_fout)
 
 # TODO: Add argument parser
 with open(TRANSIT_DIR + "trips.txt", "r") as trips_fin, \
@@ -107,3 +155,4 @@ with open(TRANSIT_DIR + "trips.txt", "r") as trips_fin, \
         open(MAP_DIR + "shapes.json", "r") as shapes_fin:
     parse_trips(trips_fin)
     parse_routes(shapes_fin)
+    parse_times(times_fin)

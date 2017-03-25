@@ -1,6 +1,8 @@
 import cPickle as pickle
 
+from datetime import datetime
 from eventlet import monkey_patch
+from eventlet.greenthread import spawn, sleep
 from flask import Flask, json, jsonify, render_template
 from flask_socketio import SocketIO, emit
 
@@ -23,14 +25,20 @@ with open(PICKLE_DIR + "graph.pkl", "rb") as graph_f, \
         open(JSON_DIR + "shapes.json", "r") as shapes_f, \
         open(JSON_DIR + "stops.json", "r") as stops_f, \
         open(JSON_DIR + "routes.json", "r") as routes_f, \
-        open(JSON_DIR + "colors.json", "r") as colors_f:
+        open(JSON_DIR + "colors.json", "r") as colors_f, \
+        open(JSON_DIR + "times.json", "r") as times_f:
     graph = pickle.load(graph_f)
     prev_stops = pickle.load(prev_stops_f)
     shapes = json.load(shapes_f)
     stops = json.load(stops_f)
     routes = json.load(routes_f)
     colors = json.load(colors_f)
+    times = json.load(times_f)
 
+
+def log(msg):
+    print "[{}] {}".format(str(datetime.now().replace(microsecond=0)),
+                           msg)
 # demos = [
 #     [
 #         {
@@ -73,17 +81,12 @@ with open(PICKLE_DIR + "graph.pkl", "rb") as graph_f, \
 
 @app.route('/')
 def index():
-    return render_template("index.html", mapbox_key=mapbox_key, subway_routes=shapes.keys(), route_colors=colors)
+    return render_template("index.html", mapbox_key=mapbox_key,
+                           subway_routes=shapes.keys(), route_colors=colors)
 
 
 @app.route('/map_json/<route>')
 def map_json(route):
-    # Documentation for shapes.json:
-    # shape_id: {
-    #      sequence: number of points,
-    #      color: route color,
-    #      points: [[lon, lat],...,]
-    # }
     return jsonify(shapes[route])
 
 
@@ -111,6 +114,17 @@ def stops_json():
     return jsonify(stops)
 
 
+def schedule_timer():
+    while True:
+        spawn(schedule_handler)
+        sleep(5)
+
+
+def schedule_handler():
+    log("server emmited hello world")
+    socketio.emit("update", {"hello": "world"})
+
+
 @socketio.on('get_feed')
 def subway_cars():
     global feed_event
@@ -118,7 +132,7 @@ def subway_cars():
     if feed_event is None:
         feed_event = socketio.start_background_task(target=subway_cars_timer)
 
-    print "Emitted."
+    log("Emitted.")
     # emit('feed', demos[0])
 
 # @socketio.on('update_subway_cars')
@@ -138,8 +152,10 @@ def subway_cars_timer():
 
 if __name__ == "__main__":
     feed_thread = feed.start_timer()
+    schedule_thread = spawn(schedule_timer)
 
     try:
         socketio.run(app, debug=True)
     finally:
         feed_thread.cancel()
+        schedule_thread.cancel()
