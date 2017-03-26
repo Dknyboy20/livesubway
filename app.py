@@ -1,8 +1,8 @@
 import cPickle as pickle
 
-from datetime import datetime
+from datetime import datetime, date
 from eventlet import monkey_patch
-from eventlet.greenthread import spawn, sleep
+
 from flask import Flask, json, jsonify, render_template
 from flask_socketio import SocketIO, emit
 
@@ -114,14 +114,77 @@ def stops_json():
     return jsonify(stops)
 
 
-def schedule_timer():
-    while True:
-        spawn(schedule_handler)
-        sleep(5)
+def schedule_init():
+    """Finds the index of the next starting subway trip within an epsilon away
+    from the current time and current day. TODO: Populates an active_cars
+    array of the currently underway and unfinished subway trips.
+
+    Returns:
+        str: day of the week to key times dictionary
+        int: index of next starting train in times[weekday]
+        list: currently underway and unfinished trips
+    """
+    weekday_int = datetime.today().weekday()
+
+    active_cars = []
+
+    if weekday_int is 5:
+        weekday = "SAT"
+    elif weekday_int is 6:
+        weekday = "SUN"
+    else:
+        weekday = "WKD"
+
+    curr_schedule = times[weekday]
+
+    c = b_search_for_curr_time(curr_schedule, datetime.today())
+    print c
+    print curr_schedule[c]
+
+
+def b_search_for_curr_time(arr, t_target):
+    """Standard binary serach to find the next starting trip within a given
+    epsilon difference
+
+    Args:
+        arr (list): all current trips for the day sorted by time
+        t_target (datetime.datetime): current datetime
+
+    Returns:
+        int: index of next starting trip
+    """
+    t_epsilon = 30
+    time_str_format = "%H:%M:%S"
+    lo, hi, mid = 0, len(arr), None
+
+    while lo < hi:
+        mid = (lo + hi) / 2
+        t_candidate = datetime.strptime(arr[mid]["init_time"], time_str_format)
+
+        t_delta = t_candidate.replace(
+            year=date.today().year,
+            month=date.today().month,
+            day=date.today().day
+        ) - t_target
+
+        # check to see if the difference is negative (if t_candidate )
+        if t_delta.days < 0:
+            lo = mid
+        elif t_delta.seconds < t_epsilon or lo == hi:
+            # if search terminates early, there are multiple trips in the same
+            # desired time block.
+            # Reaches the first index of the time block
+            if lo != hi:
+                s_t_candidate = str(t_candidate.time().replace(microsecond=0))
+                while arr[mid - 1]["init_time"] == s_t_candidate:
+                    mid -= 1
+            return mid
+        else:
+            hi = mid
 
 
 def schedule_handler():
-    log("server emmited hello world")
+
     socketio.emit("update", {"hello": "world"})
 
 
@@ -152,10 +215,9 @@ def subway_cars_timer():
 
 if __name__ == "__main__":
     feed_thread = feed.start_timer()
-    schedule_thread = spawn(schedule_timer)
+    schedule_init()
 
     try:
         socketio.run(app, debug=True)
     finally:
         feed_thread.cancel()
-        schedule_thread.cancel()
