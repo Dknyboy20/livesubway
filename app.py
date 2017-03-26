@@ -2,6 +2,7 @@ import cPickle as pickle
 
 from datetime import datetime, date
 from eventlet import monkey_patch
+from eventlet.greenthread import spawn, sleep
 
 from flask import Flask, json, jsonify, render_template
 from flask_socketio import SocketIO, emit
@@ -114,16 +115,28 @@ def stops_json():
     return jsonify(stops)
 
 
+# Could also implement using decorator - would be more functional
+def parse_time(t_str):
+    d_today = date.today()
+    time_str_format = "%H:%M:%S"
+    return datetime.strptime(t_str, time_str_format).replace(
+        year=d_today.year,
+        month=d_today.month,
+        day=d_today.day
+    )
+
+
 def schedule_init():
-    """Finds the index of the next starting subway trip within an epsilon away
-    from the current time and current day. TODO: Populates an active_cars
-    array of the currently underway and unfinished subway trips.
+    """Finds the index of the next starting subway trip.
+    TODO: Populates an active_cars array of the currently underway and
+    unfinished subway trips.
 
     Returns:
         str: day of the week to key times dictionary
         int: index of next starting train in times[weekday]
         list: currently underway and unfinished trips
     """
+
     weekday_int = datetime.today().weekday()
 
     active_cars = []
@@ -136,15 +149,20 @@ def schedule_init():
         weekday = "WKD"
 
     curr_schedule = times[weekday]
+    d_today = datetime.today()
+    c = b_search_for_curr_time(curr_schedule, d_today)
+    # Inefficient way to find all operational cars
+    for i in xrange(c):
+        t_last_stop = parse_time(curr_schedule[i]["trip_time"][-1][0])
+        if (t_last_stop - d_today).days >= 0:
+            active_cars.append(i)
 
-    c = b_search_for_curr_time(curr_schedule, datetime.today())
-    print c
-    print curr_schedule[c]
+    return c, weekday, active_cars
 
 
 def b_search_for_curr_time(arr, t_target):
-    """Standard binary serach to find the next starting trip within a given
-    epsilon difference
+    """Standard binary search through sorted arr to find the next starting
+    mta trip.
 
     Args:
         arr (list): all current trips for the day sorted by time
@@ -153,39 +171,33 @@ def b_search_for_curr_time(arr, t_target):
     Returns:
         int: index of next starting trip
     """
-    t_epsilon = 30
-    time_str_format = "%H:%M:%S"
-    lo, hi, mid = 0, len(arr), None
+
+    lo, hi = 0, len(arr)
 
     while lo < hi:
         mid = (lo + hi) / 2
-        t_candidate = datetime.strptime(arr[mid]["init_time"], time_str_format)
+        t_delta = parse_time(arr[mid]["init_time"]) - t_target
 
-        t_delta = t_candidate.replace(
-            year=date.today().year,
-            month=date.today().month,
-            day=date.today().day
-        ) - t_target
-
-        # check to see if the difference is negative (if t_candidate )
+        # check to see if the difference is negative
         if t_delta.days < 0:
-            lo = mid
-        elif t_delta.seconds < t_epsilon or lo == hi:
-            # if search terminates early, there are multiple trips in the same
-            # desired time block.
-            # Reaches the first index of the time block
-            if lo != hi:
-                s_t_candidate = str(t_candidate.time().replace(microsecond=0))
-                while arr[mid - 1]["init_time"] == s_t_candidate:
-                    mid -= 1
-            return mid
+            lo = mid + 1
         else:
             hi = mid
+    return lo
 
 
 def schedule_handler():
+    """Testing function for now
 
-    socketio.emit("update", {"hello": "world"})
+    Returns:
+        TYPE: Description
+    """
+    while (True):
+        i_next_subway, s_weekday, l_active_cars = schedule_init()
+        socketio.emit("update", [times[s_weekday][i_next_subway],
+                      l_active_cars])
+        log("emitted update")
+        sleep(5)
 
 
 @socketio.on('get_feed')
@@ -215,8 +227,8 @@ def subway_cars_timer():
 
 if __name__ == "__main__":
     feed_thread = feed.start_timer()
-    schedule_init()
-
+    # testing/debugging purposes only
+    spawn(schedule_handler)
     try:
         socketio.run(app, debug=True)
     finally:
