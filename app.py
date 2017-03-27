@@ -40,44 +40,6 @@ with open(PICKLE_DIR + "graph.pkl", "rb") as graph_f, \
 def log(msg):
     print "[{}] {}".format(str(datetime.now().replace(microsecond=0)),
                            msg)
-# demos = [
-#     [
-#         {
-#             "path": [[-73.96411, 40.807722], [-73.958372, 40.815581]],
-#             "progress": 0.5,
-#             "remaining_time": 10
-#         },
-#         {
-#             "path": graph.get_path("118", "119", shapes),
-#             "progress": 0.3,
-#             "remaining_time": 15
-#         }
-#     ],
-#     [
-#         {
-#             "path": [[-73.96411, 40.807722], [-73.959874, 40.77362]],
-#             "progress": 0.5,
-#             "remaining_time": 10
-#         },
-#         {
-#             "path": [[-73.958372, 40.815581], [-73.987691, 40.755477]],
-#             "progress": 0.3,
-#             "remaining_time": 25
-#         },
-#     ],
-#     [
-#         {
-#             "path": [[-73.958372, 40.815581], [-73.987691, 40.755477]],
-#             "progress": 0.3,
-#             "remaining_time": 25
-#         },
-#         {
-#             "path": [[-73.992629, 40.730328], [-73.989951, 40.734673]],
-#             "progress": 0.3,
-#             "remaining_time": 15
-#         }
-#     ]
-# ]
 
 
 @app.route('/')
@@ -137,30 +99,23 @@ def schedule_init():
         list: currently underway and unfinished trips
     """
 
-    weekday_int = datetime.today().weekday()
+    weekday = {5: "SAT", 6: "SUN"}.get(datetime.today().weekday(), "WKD")
 
     active_cars = []
 
-    if weekday_int is 5:
-        weekday = "SAT"
-    elif weekday_int is 6:
-        weekday = "SUN"
-    else:
-        weekday = "WKD"
-
-    curr_schedule = times[weekday]
-    d_today = datetime.today()
-    c = b_search_for_curr_time(curr_schedule, d_today)
-    # Inefficient way to find all operational cars
+    daily_schedule = times[weekday]
+    today = datetime.today()
+    c = find_index_of_next_train(daily_schedule, today)
+    # relatively inefficient way to find all operational cars
     for i in xrange(c):
-        t_last_stop = parse_time(curr_schedule[i]["trip_time"][-1][0])
-        if (t_last_stop - d_today).days >= 0:
+        train_stop_time = parse_time(daily_schedule[i]["trip_time"][-1][0])
+        if (train_stop_time - today).days >= 0:
             active_cars.append(i)
 
     return c, weekday, active_cars
 
 
-def b_search_for_curr_time(arr, t_target):
+def find_index_of_next_train(arr, t_target):
     """Standard binary search through sorted arr to find the next starting
     mta trip.
 
@@ -187,15 +142,13 @@ def b_search_for_curr_time(arr, t_target):
 
 
 def schedule_handler():
-    """Testing function for now
-
-    Returns:
-        TYPE: Description
+    """This function is used for testing for now - will be replaced in the
+    future
     """
     while (True):
-        i_next_subway, s_weekday, l_active_cars = schedule_init()
-        socketio.emit("update", [times[s_weekday][i_next_subway],
-                      l_active_cars])
+        next_subway_index, weekday, active_cars = schedule_init()
+        socketio.emit("update", [times[weekday][next_subway_index],
+                      active_cars])
         log("emitted update")
         sleep(5)
 
@@ -210,19 +163,9 @@ def subway_cars():
     log("Emitted.")
     # emit('feed', demos[0])
 
-# @socketio.on('update_subway_cars')
-# def update_subway_cars:
-# TODO: Implement
-
 
 def subway_cars_timer():
-    while True:
-        socketio.sleep(30)
-        # demo_emit = demos[counter % len(demos)]
-        # print demo_emit
-        # print "Emitted."
-        # socketio.emit('feed', demo_emit)
-        # counter += 1
+    pass
 
 
 if __name__ == "__main__":
