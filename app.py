@@ -2,7 +2,6 @@ import cPickle as pickle
 
 from datetime import datetime, date
 from eventlet import monkey_patch
-from eventlet.greenthread import spawn, sleep
 
 from flask import Flask, json, jsonify, render_template
 from flask_socketio import SocketIO, emit
@@ -45,12 +44,7 @@ def log(msg):
 @app.route('/')
 def index():
     return render_template("index.html", mapbox_key=mapbox_key,
-                           subway_routes=shapes.keys(), route_colors=colors)
-
-
-@app.route('/map_json/<route>')
-def map_json(route):
-    return jsonify(shapes[route])
+                           route_colors=colors)
 
 
 @app.route('/map_geojson')
@@ -88,7 +82,37 @@ def parse_time(t_str):
     )
 
 
-def schedule_init():
+def schedule_daemon(index, weekday):
+    today = datetime.today()
+    next_departure = parse_time(times[weekday][index]["init_time"])
+    time_delta = next_departure - today
+
+    while True:
+        if time_delta.days == 0:
+            departures = []
+            log("sleeping for {} seconds...".format(time_delta.seconds))
+            socketio.sleep(time_delta.seconds)
+            next_time = parse_time(times[weekday][index]["init_time"])
+            while next_time == next_departure:
+                departures.append(times[weekday][index])
+                if (index < len(times[weekday])):
+                    index += 1
+                else:
+                    raise Exception
+                    # TODO: implement functionality to change dates
+                next_time = parse_time(times[weekday][index]["init_time"])
+            next_departure = next_time
+            log(str(next_departure))
+            socketio.emit("schedule", departures)
+            log("Emitted {} departures".format(len(departures)))
+            # write loop to check for equivalent times
+
+            time_delta = next_departure - datetime.today()
+        else:
+            raise ValueError
+
+
+def init_schedule():
     """Finds the index of the next starting subway trip.
     TODO: Populates an active_cars array of the currently underway and
     unfinished subway trips.
@@ -106,7 +130,8 @@ def schedule_init():
     daily_schedule = times[weekday]
     today = datetime.today()
     c = find_index_of_next_train(daily_schedule, today)
-    # relatively inefficient way to find all operational cars
+
+    # inefficient way to find all operational cars
     for i in xrange(c):
         train_stop_time = parse_time(daily_schedule[i]["trip_time"][-1][0])
         if (train_stop_time - today).days >= 0:
@@ -141,16 +166,15 @@ def find_index_of_next_train(arr, t_target):
     return lo
 
 
-def schedule_handler():
+def _schedule_handler():
     """This function is used for testing for now - will be replaced in the
     future
     """
-    while (True):
-        next_subway_index, weekday, active_cars = schedule_init()
-        socketio.emit("update", [times[weekday][next_subway_index],
-                      active_cars])
-        log("emitted update")
-        sleep(5)
+    log("ran first")
+    # feed_thread = feed.start_timer()
+    schedule_index, weekday, active_cars = init_schedule()
+    socketio.start_background_task(schedule_daemon, schedule_index, weekday)
+    # log("emitted update")
 
 
 @socketio.on('get_feed')
@@ -169,10 +193,6 @@ def subway_cars_timer():
 
 
 if __name__ == "__main__":
-    feed_thread = feed.start_timer()
+    _schedule_handler()
     # testing/debugging purposes only
-    spawn(schedule_handler)
-    try:
-        socketio.run(app, debug=True)
-    finally:
-        feed_thread.cancel()
+    socketio.run(app, debug=True, use_reloader=False)

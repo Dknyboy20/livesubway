@@ -9,6 +9,7 @@ API_KEYS.py
 .DS_Store
 .idea
 .ipynb_checkpoints
+.jshintrc
 .vagrant
 .vscode
 transit_files

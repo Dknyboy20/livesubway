@@ -13,6 +13,8 @@ def parse_routes(shapes_fin):
         shapes_fin (file): shapes.json that contains all coordinates
 
     """
+    # H and SI lines do not have a color defined by the MTA
+    DEFAULT = "#2850AD"
     shapes_jin = json.load(shapes_fin)
     best_path_found = {}
     for line, data in shapes_jin.iteritems():
@@ -20,12 +22,13 @@ def parse_routes(shapes_fin):
         train_direc = line[line.rfind('.') + 1]
         coord_list_len = int(data["sequence"])
 
+        # Finds best path by considering longest collection of coordinates
         better_path_exists = train_line not in best_path_found or \
             coord_list_len > best_path_found[train_line]["length"]
 
         if train_direc == 'N' and better_path_exists:
             best_path_found[train_line] = {
-                "color": data["color"],
+                "color": data["color"] if data["color"] == "#" else DEFAULT,
                 "length": coord_list_len,
                 "coordinates": data["points"]
 

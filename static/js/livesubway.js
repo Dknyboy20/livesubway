@@ -32,20 +32,25 @@ const SUBWAY_ICON = `<i class="fa fa-dot-circle-o" aria-hidden="true" style="vis
 const MAPBOX = {
   container: "subwaymap",
   style: "mapbox://styles/mapbox/light-v9",
-  center: [-73.983393, 40.788552],
+  center: [-73.889393, 40.730552],
   dragRotate: false,
-  zoom: 10.84,
+  zoom: 10.45,
+  minZoom: 10.15,
+  bearing: 28.3
 };
 
-const LAYER = {
-  id: "subwayCars",
-  type: "circle",
-  source: "subwayCars",
-  paint: {
-    "circle-radius": 4,
-    "circle-color": "#000000",
-  },
+const MAPBOX_LAYER_LAYOUT = {
+  "line-join": "round",
+  "line-cap": "round"
 };
+
+const MAPBOX_STOPS_PAINT = {
+  "circle-radius": {
+    stops: [[11, 3], [14, 4], [16, 5]],
+  },
+  "circle-color": "#ccc",
+};
+
 
 // _________________________________________
 // START OF ANIMATION SEGMENT
@@ -103,49 +108,6 @@ const calcSpeed = (startindex, endindex, coordmap) => {
   return findDistance(startindex, endindex, coordmap)/SERVER_DELAY;
  };
 
-// Creates a train at the starting location of the
-// given <line:string> in <delay:int> seconds.
-// <train_data:Object>: {
-//  id:               trip_id, (unique)
-//  line:             string,
-//  speed:            int,
-//  current_location: [coord]
-// }
-const initTrain = (delay, train_data) => {
-  setTimeout(delay, () => {
-    // train_data
-    ActiveTrains[train_data.line].push(train_data);
-
-  });
-};
-
-const delTrain = (delay, train_data) => {
-  setTimeout(delay, () => {
-    delete ActiveTrains[train_data.line][train_data.id];
-  });
-};
-
-// <subwayTrainSched:Object>: {
-//  subwayTrain: Object
-// }
-// subwayTrain: {
-//  line:           string,
-//  train_id:       trip_id,
-//  initialize:     bool,
-//  delete:         bool,
-//  move:           bool,
-//  action_time:    Time,
-//  end_loc:        index,
-//   
-// }
-const update = subwayTrainSched => {
-  subwayTrainSched.forEach(subwayTrain => {
-    if (!subwayTrain.initialized){
-      initTrain( subwayTrain);
-    }
-  });
-};
-
 
 // };
 
@@ -192,40 +154,40 @@ const animateTrains = (map, subwayCars) => {
     },
   };
 
-  // const start = Date.now();
+  const start = Date.now();
 
-  // let then = start;
-  // let counter = 0;
+  let then = start;
+  let counter = 0;
 
-  // const animate = () => {
-  //   if (counter / INTERVAL < (SPEED * DURATION) - 1) {
-  //     const now = Date.now();
-  //     const elapsed = now - then;
+  const animate = () => {
+    if (counter / INTERVAL < (SPEED * DURATION) - 1) {
+      const now = Date.now();
+      const elapsed = now - then;
 
-  //     then = now;
+      then = now;
 
-  //     points.forEach((point, i) => {
-  //       const animSteps = allAnimSteps[i];
+      points.forEach((point, i) => {
+        const animSteps = allAnimSteps[i];
 
-  //       point.geometry.coordinates = animSteps[Math.round(elapsed / INTERVAL)];
-  //     });
+        point.geometry.coordinates = animSteps[Math.round(elapsed / INTERVAL)];
+      });
 
-  //     map.getSource("subwayCars").setData({
-  //       type: "FeatureCollection",
-  //       features: points,
-  //     });
+      map.getSource("subwayCars").setData({
+        type: "FeatureCollection",
+        features: points,
+      });
 
-  //     counter += elapsed;
+      counter += elapsed;
 
-  //     requestAnimationFrame(animate);
-  //   } else {
-  //     const animTime = ((Date.now() - start) / 1000).toString();
+      requestAnimationFrame(animate);
+    } else {
+      const animTime = ((Date.now() - start) / 1000).toString();
 
-  //     console.log(`Time elapsed for animation: ${animTime}`);
-  //   }
-  // };
+      console.log(`Time elapsed for animation: ${animTime}`);
+    }
+  };
 
-  // animate();
+  animate();
 };
 // _________________________________________
 // END OF ANIMATION SEGMENT
@@ -247,56 +209,67 @@ const getJSON = (path, success, fail) => {
   xmlhttp.send();
 };
 
-const fetchMap = (fetcher, map, routes, finish) => {
+const fetchMap = (fetcher, map, finish) => {
   const renderRoutes = (routesData, cb) => {
+    routesData.features.forEach((routeData) => {
+      
+      map.addSource(routeData.properties.route_id,
+      {
+        type: "geojson",
+        data: routeData
+      });
+      
+      map.addLayer(
+      {
+        id: routeData.properties.route_id,
+        type: "line",
+        source: routeData.properties.route_id,
+        layout: MAPBOX_LAYER_LAYOUT,
+        paint: {"line-color": routeData.properties.color }
+      });
 
-    const linesLayer = new L.geoJson(routesData).addTo(map);
-
-    linesLayer.setStyle((feature) => {
-      return {
-        "weight": 3,
-        "opacity": 1, //feature.properties.route_id === "2" ? 1 : 0, 
-        "color": SUBWAY_COLORS[feature.properties.route_id]
-      };
     });
 
-    cb();
+    cb(routesData);
   };
 
   const routePromise = new Promise((resolve, reject) => {
-    fetcher("/map_geojson", (stopData) => {
-
-      renderRoutes(stopData, resolve);
+    fetcher("/map_geojson", (routesData) => {
+      renderRoutes(routesData, resolve);
     }, reject);
   });
 
   const renderStops = (stopData, cb) => {
     const stops = Object.entries(stopData).filter(([_, stopVal]) => {
       return stopVal.name.toLowerCase().indexOf("2 av") === -1;
-    }).map(([_, stopVal]) => stopVal);
-
-    const stopNames = stops.map(stopVal => stopVal.name);
-
-    const subwayMarkers = stops.map(stopVal => {
-      const stopMarker = L.divIcon({
-        html: SUBWAY_ICON
-      });
-
-      return L.marker(stopVal.coordinates, {
-        icon: stopMarker
-      });
+    }).map(([_, stopVal]) => {
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: stopVal.coordinates.reverse()
+        },
+        properties: {
+          title: stopVal.name
+        }
+      };
+    });
+    map.addSource("subwayStops", {
+      type: "geojson",
+      data: {
+        type: "FeatureCollection",
+        features: stops
+      }
     });
 
-    L.layerGroup(subwayMarkers).addTo(map);
-
-    subwayMarkers.forEach((marker, index) => {
-      marker.bindPopup(`<strong>${stopNames[index]}</strong>`);
-      marker.on("mouseover", e => {
-        marker.openPopup();
-      });
+    map.addLayer({
+      id: "subwayStops",
+      type: "circle",
+      source: "subwayStops",
+      paint: MAPBOX_STOPS_PAINT
     });
 
-    cb();
+    cb(stopData);
   };
 
   const stopPromise = new Promise((resolve, reject) => {
@@ -306,82 +279,41 @@ const fetchMap = (fetcher, map, routes, finish) => {
   });
 
   Promise.all([routePromise, stopPromise])
-    .then(() => {
-      finish();
+    .then((data) => {
+      const [routes, stops] = data;
+      finish(routes, stops);
     }).catch(() => {});
 };
 
-class MapDB {
-  constructor() {
-    const storesPath = [DB_ROUTES_STORE, DB_STOPS_STORE];
-
-    const openRequest = indexedDB.open(DB_NAME, 1);
-
-    openRequest.onupgradeneeded = function(e) {
-      console.log("Upgrading...");
-
-      const db = e.target.result;
-
-      storesPath.filter(x => db.objectStoreNames.contains(x)).forEach(x => {
-        db.createObjectStore(DB_ROUTES_STORE);
-      });
-    };
-
-    openRequest.onsuccess = (e) => {
-      console.log("Success!");
-
-      this.db = e.target.result;
-    };
-
-    openRequest.onerror = (e) => {
-      console.log("Error");
-      console.dir(e);
-    };
-  }
-
-  addRoutes(routes) {
-
-  }
-}
-
 document.addEventListener("DOMContentLoaded", () => {
-  const map = L.map("subwaymap").setView(LEAFLET_CENTER, LEAFLET_ZOOM);
+  mapboxgl.accessToken = ACCESS_TOKEN;
+  const map = new mapboxgl.Map(MAPBOX);
 
-  map.options.minZoom = LEAFLET_ZOOM - 1;
-  map.options.maxZoom = LEAFLET_MAX_ZOOM;
-
-  L.tileLayer(LEAFLET_TYLE_LAYER, {
-    attribution: LEAFLET_ATTRIBUTION,
-    minZoom: LEAFLET_ZOOM - 1,
-    maxZoom: LEAFLET_MAX_ZOOM
-  }).addTo(map);
-
-  const bounds = L.latLngBounds(LEAFLET_MAP_BOUND);
-
-  map.on("drag", () => {
-    map.panInsideBounds(bounds, {
-      animate: false
-    });
-  });
 
   const indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
 
   const socket = io.connect("localhost:5000");
 
-  // if (!indexedDB) {
-  fetchMap(getJSON, map, SUBWAY_ROUTES, () => {
-    socket.emit("get_feed");
-  });
-  // } else {
-  //   new MapDB();
-  // }
 
-  socket.emit("get_feed");
+  map.on("load", () => {
+    fetchMap(getJSON, map, (routes, stops) => {
+      socket.emit("get_feed");
+      const schedule_handler = (routes, stops) => {
+
+      };
+      socket.on("schedule", handler(routes, stops));
+    });
+  });
+
 
   socket.on("feed", subwayCars => {
     animateTrains(map, subwayCars);
   });
-  socket.on("update", message => {
-    console.log(message);
+  socket.on("update", newSubways => {
+    console.log(newSubways);
+    const animation_steps = newSubways.map(newSubway => {
+
+    });
+
   });
 });

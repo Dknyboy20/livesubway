@@ -7,7 +7,17 @@
   "unused"        : true,
   "strict"        : true,
   "maxlen"        : 120,
+  "browser"       : true,
 
   "esversion"     : 6,
-  "camelcase"     : false
+  "camelcase"     : false,
+  "globals": {
+    "io"            : false,
+    "turf"          : true,
+    "mapboxgl"      : true,
+    "ACCESS_TOKEN"  : true,
+    "SUBWAY_ROUTES" : true,
+    "SUBWAY_COLORS" : true
+
+  }
 }
