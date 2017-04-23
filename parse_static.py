@@ -1002,7 +1002,7 @@ def write_static_files(args):
     print "Loading static schedule information..."
     loader = transitfeed.Loader(STATIC_TRANSIT_DIR)
     schedule = loader.Load()
-    print "Done. Writing to file(s)..."
+    print "Done.\n\nWriting to file(s)..."
 
     for file, parse_function in PARSE_FUNCTIONS.iteritems():
         if not getattr(args, file):

@@ -1,10 +1,13 @@
 "use strict";
 
+const SUBWAY_STOP_DELAY = 20; // unused for now
 const SPEED = 60;
 const DURATION = 30;
 const TOTAL_FRAMERATE = SPEED * DURATION;
 const INTERVAL = 1000 / SPEED;
 const SAMPLE_POINTS = 20;
+const TIME_FORMAT = "HH:mm:ss";
+
 
 const SERVER_DELAY = 5;
 const ACTIVE_CARS = {
@@ -84,13 +87,54 @@ const ActiveTrains = {
   "SIR": [],
 };
 
+(function() {
+    var lastTime = 0;
+    var vendors = ["ms", "moz", "webkit", "o"];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+"RequestAnimationFrame"];
+        window.cancelAnimationFrame = window[vendors[x]+"CancelAnimationFrame"] || 
+        window[vendors[x]+"CancelRequestAnimationFrame"];
+    }
+ 
+    if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = function(callback, element) {
+            var currTime = new Date().getTime();
+            var timeToCall = Math.max(0, 16 - (currTime - lastTime));
+            var id = window.setTimeout(function() { callback(currTime + timeToCall); }, 
+              timeToCall);
+            lastTime = currTime + timeToCall;
+            return id;
+        };
+ 
+    if (!window.cancelAnimationFrame)
+        window.cancelAnimationFrame = function(id) {
+            clearTimeout(id);
+        };
+}());
+
+const Point = coordinate => {
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "Point",
+      coordinates: coordinate
+    }
+  };
+};
+
+
+const findDistanceByCoord = (c1, c2) => {
+  return turf.distance(Point(c1), Point(c2), "miles");
+};
+
 // Finds the distance between two indices on the geojson line.
 // Adds up the individual segments until the end segment.
 // All units are in miles
-const findDistance = (startindex, endindex, coordmap) => {
+const findDistanceByIndex = (startindex, endindex, coordmap) => {
   let dist = 0;
   while (startindex !== endindex){
-    dist += turf.along(coordmap[startindex], coordmap[++startindex], "miles");
+    dist += findDistanceByCoord(coordmap[startindex], coordmap[endindex]);
   }
   return dist;
 };
@@ -105,7 +149,7 @@ const findDistance = (startindex, endindex, coordmap) => {
  * @return {[type]}
  */
 const calcSpeed = (startindex, endindex, coordmap) => {
-  return findDistance(startindex, endindex, coordmap)/SERVER_DELAY;
+  return findDistanceByIndex(startindex, endindex, coordmap)/SERVER_DELAY;
  };
 
 
@@ -146,13 +190,7 @@ const animateTrains = (map, subwayCars) => {
     });
   });
 
-  const source = {
-    type: "geojson",
-    data: {
-      type: "FeatureCollection",
-      features: points,
-    },
-  };
+
 
   const start = Date.now();
 
@@ -210,9 +248,21 @@ const getJSON = (path, success, fail) => {
 };
 
 const fetchMap = (fetcher, map, finish) => {
+  const prefix_distances = routesData => {
+    console.log("test", routesData);
+    routesData.features.forEach(routeData => {
+      let total_distance = 0;
+      let previous = routeData.geometry.coordinates[0];
+      routeData.prefixDistances = routeData.geometry.coordinates.map( point => {
+        total_distance += findDistanceByCoord(previous, point);
+        previous = point;
+        return total_distance;
+      });
+    });
+  };
+
   const renderRoutes = (routesData, cb) => {
     routesData.features.forEach((routeData) => {
-      
       map.addSource(routeData.properties.route_id,
       {
         type: "geojson",
@@ -229,7 +279,8 @@ const fetchMap = (fetcher, map, finish) => {
       });
 
     });
-
+    prefix_distances(routesData);
+    //console.log(routesData);
     cb(routesData);
   };
 
@@ -296,12 +347,62 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   map.on("load", () => {
+
+    const compareCoordinates = stop_coordinate => {
+      return element => {
+       // console.log(element, stop_coordinate);
+       return element[0] === stop_coordinate[0] && element[1] === stop_coordinate[1]; 
+      };
+    };
+
     fetchMap(getJSON, map, (routes, stops) => {
       socket.emit("get_feed");
-      const schedule_handler = (routes, stops) => {
+      console.log(routes, stops);
+      
+      socket.on("schedule", (data) => {
+        
+        const animation_schedule = data.map( schedule => {
+          console.log(schedule);
+          const animation_steps = [];
+          const current_route = routes.features.find((element) => {
+            return element.properties.route_id === schedule.line;
+          });
+          if (current_route === null){
+            throw "failed to find route";
+          }
 
-      };
-      socket.on("schedule", handler(routes, stops));
+          console.log(current_route);
+
+          const route_coordinates = current_route.geometry.coordinates;
+          const route_distances = current_route.prefixDistances;
+
+          let previous = null;
+          let previous_index = schedule.direction == "N" ? 0 : route_coordinates.length - 1;
+          schedule.trip_time.forEach(stop_time => {
+            if (previous === null){
+              previous = stop_time;
+            }
+            else {
+
+              const seconds_difference = moment(stop_time[0], TIME_FORMAT).diff(moment(previous[0], TIME_FORMAT),
+                "seconds");
+              const stop_coordinate = stops[stop_time[1].slice(0, -1)].coordinates;
+              const stop_index = route_coordinates.findIndex(compareCoordinates(stop_coordinate));
+
+              // if (stop_index === -1) throw "Unable to find stop in routes: " + stop_index;
+              const stop_distance = Math.abs(route_distances[stop_index] - route_distances[previous_index]);
+              // console.log(seconds_difference, stop_index, previous_index, stop_distance, stop_time[0], previous[0]);
+              previous_index = stop_index;
+              const subway_speed = stop_distance / seconds_difference;
+              console.log(subway_speed * 60 * 60);
+
+            }
+
+
+          });
+
+        });
+      });
     });
   });
 
@@ -309,11 +410,5 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("feed", subwayCars => {
     animateTrains(map, subwayCars);
   });
-  socket.on("update", newSubways => {
-    console.log(newSubways);
-    const animation_steps = newSubways.map(newSubway => {
 
-    });
-
-  });
 });

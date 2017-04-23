@@ -4,12 +4,12 @@ from datetime import datetime, date
 from eventlet import monkey_patch
 
 from flask import Flask, json, jsonify, render_template
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 
 from API_KEYS import mapbox_key
 from static import Edge, PrevStops, Segment, Stop, StopGraph, StopID  # noqa: F401
 
-import feed
+# import feed
 
 monkey_patch()
 
@@ -37,8 +37,7 @@ with open(PICKLE_DIR + "graph.pkl", "rb") as graph_f, \
 
 
 def log(msg):
-    print "[{}] {}".format(str(datetime.now().replace(microsecond=0)),
-                           msg)
+    print "[{}] {}".format(str(datetime.now().replace(microsecond=0)), msg)
 
 
 @app.route('/')
@@ -49,29 +48,14 @@ def index():
 
 @app.route('/map_geojson')
 def map_geojson():
-    # Documentation for shapes.json:
-    # shape_id: {
-    #      sequence: number of points,
-    #      color: route color,
-    #      points: [[lon, lat],...,]
-    # }
     return jsonify(routes)
 
 
 @app.route('/stops_json')
 def stops_json():
-    # Documentation for stops.json:
-    # stop_id: {
-    #      coordinates: {
-    #          lat: latitude,
-    #          lon: longitude
-    #      },
-    #      name: name
-    # }
     return jsonify(stops)
 
 
-# Could also implement using decorator - would be more functional
 def parse_time(t_str):
     d_today = date.today()
     time_str_format = "%H:%M:%S"
@@ -109,7 +93,7 @@ def schedule_daemon(index, weekday):
 
             time_delta = next_departure - datetime.today()
         else:
-            raise ValueError
+            raise ValueError(time_delta)
 
 
 def init_schedule():

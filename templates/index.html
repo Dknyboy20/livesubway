@@ -7,13 +7,11 @@
 
 	<script src='//api.tiles.mapbox.com/mapbox.js/plugins/turf/v2.0.0/turf.min.js' charset='utf-8'></script>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.2/dist/leaflet.css" />
   <script src="https://use.fontawesome.com/c950485feb.js"></script>
-  <script src="https://unpkg.com/leaflet@1.0.2/dist/leaflet.js"></script>
 	<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.min.js"></script>
  	<script type="text/javascript">
-		const ACCESS_TOKEN = '{{ mapbox_key }}';
-    const SUBWAY_ROUTES = {{ subway_routes|safe }};
+		const ACCESS_TOKEN = "{{ mapbox_key }}";
     const SUBWAY_COLORS = {{ route_colors|safe }};
  	</script>
 

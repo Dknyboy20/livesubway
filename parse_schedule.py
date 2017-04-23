@@ -1,7 +1,7 @@
 import simplejson as json
 from datetime import time
 
-TRANSIT_DIR = "transit_files/ "
+TRANSIT_DIR = "transit_files/"
 MAP_DIR = "map_files/"
 
 
@@ -19,16 +19,16 @@ def parse_routes(shapes_fin):
     best_path_found = {}
     for line, data in shapes_jin.iteritems():
         train_line = line[:line.find('.')]
-        train_direc = line[line.rfind('.') + 1]
+        train_direction = line[line.rfind('.') + 1]
         coord_list_len = int(data["sequence"])
 
         # Finds best path by considering longest collection of coordinates
         better_path_exists = train_line not in best_path_found or \
             coord_list_len > best_path_found[train_line]["length"]
 
-        if train_direc == 'N' and better_path_exists:
+        if train_direction == 'N' and better_path_exists:
             best_path_found[train_line] = {
-                "color": data["color"] if data["color"] == "#" else DEFAULT,
+                "color": data["color"] if data["color"] != "#" else DEFAULT,
                 "length": coord_list_len,
                 "coordinates": data["points"]
 
@@ -66,7 +66,7 @@ def convertTime(train_time):
     hour = (fulltime / 60) % 24
     minute = fulltime % 60
     second = (sec_diff / 100.0) * 60
-    return time(hour, minute, int(second)).isoformat()
+    return time(hour, minute, int(second))
 
 
 def parse_times(times_fin):
@@ -94,7 +94,8 @@ def parse_times(times_fin):
             times_jout[operation_day].append({
                 "line": mta_train_id[-1][0:mta_train_id[-1].find('.')],
                 "id": current_trip_id,
-                "init_time": convertTime(mta_train_id[1]),
+                "direction": mta_train_id[-1][mta_train_id[-1].rfind('.') + 1],
+                "init_time": convertTime(mta_train_id[1]).isoformat(),
                 "trip_time": current_trip
             })
 
