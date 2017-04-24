@@ -1,5 +1,6 @@
 import simplejson as json
 from datetime import time
+from argparse import ArgumentParser
 
 TRANSIT_DIR = "transit_files/"
 MAP_DIR = "map_files/"
@@ -52,7 +53,7 @@ def parse_routes(shapes_fin):
         json.dump(geojson_out, shapes_fout)
 
 
-def convertTime(train_time):
+def _convertTime(train_time):
     """Converts train_time string into a datetime time object
 
     Args:
@@ -95,7 +96,7 @@ def parse_times(times_fin):
                 "line": mta_train_id[-1][0:mta_train_id[-1].find('.')],
                 "id": current_trip_id,
                 "direction": mta_train_id[-1][mta_train_id[-1].rfind('.') + 1],
-                "init_time": convertTime(mta_train_id[1]).isoformat(),
+                "init_time": _convertTime(mta_train_id[1]).isoformat(),
                 "trip_time": current_trip
             })
 
@@ -112,8 +113,45 @@ def parse_times(times_fin):
         json.dump(times_jout, times_fout)
 
 
-# TODO: Add argument parser
-with open(TRANSIT_DIR + "stop_times.txt", "r") as times_fin, \
-        open(MAP_DIR + "shapes.json", "r") as shapes_fin:
-    parse_routes(shapes_fin)
-    parse_times(times_fin)
+def get_parser():
+    parser = ArgumentParser(
+        description="A script to write scheduled subway data")
+    parser.add_argument(
+        "-r",
+        "--routes",
+        action="store_true",
+        default=False,
+        help="Flag to enable creation of routes.json"
+    )
+    parser.add_argument(
+        "-t",
+        "--times",
+        action="store_true",
+        default=False,
+        help="Flag to enable creation of times.json"
+    )
+    return parser
+
+
+def write_schedule_files(args):
+    PARSE_FUNCTIONS = {
+        "routes": parse_routes,
+        "times": parse_times
+    }
+    PARSE_FILES = {
+        "routes": "{}shapes.json".format(TRANSIT_DIR),
+        "times": "{}stop_times.txt".format(MAP_DIR)
+    }
+    for file, parse_function in PARSE_FUNCTIONS.iteritems():
+        if not getattr(args, file):
+            print "Skipping {}.json".format(file)
+        else:
+            print "Writing {}.json...".format(file)
+            with open(PARSE_FILES[file], "r") as fin:
+                parse_function(fin)
+            print "Finished writing {}.json to {}".format(file,
+                                                          PARSE_FILES[file])
+    print "Success"
+
+if __name__ == "__main__":
+    write_schedule_files(get_parser().parse_args())
